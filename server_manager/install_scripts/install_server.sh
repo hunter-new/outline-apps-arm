@@ -16,6 +16,8 @@
 
 # Script to install the Outline Server docker container, a watchtower docker container
 # (to automatically update the server), and to create a new Outline user.
+#
+# Supported architectures: x86_64 (AMD64) and aarch64 (ARM64, including Raspberry Pi 4)
 
 # You may set the following environment variables, overriding their defaults:
 # SB_IMAGE: The Outline Server Docker image to install, e.g. quay.io/outline/shadowbox:nightly
@@ -445,10 +447,18 @@ function set_hostname() {
 install_shadowbox() {
   local MACHINE_TYPE
   MACHINE_TYPE="$(uname -m)"
-  if [[ "${MACHINE_TYPE}" != "x86_64" ]]; then
-    log_error "Unsupported machine type: ${MACHINE_TYPE}. Please run this script on a x86_64 machine"
-    exit 1
-  fi
+  case "${MACHINE_TYPE}" in
+    x86_64|amd64)
+      MACHINE_TYPE="amd64"
+      ;;
+    aarch64|arm64)
+      MACHINE_TYPE="arm64"
+      ;;
+    *)
+      log_error "Unsupported machine type: ${MACHINE_TYPE}. Supported architectures: x86_64/amd64, aarch64/arm64"
+      exit 1
+      ;;
+  esac
 
   # Make sure we don't leak readable files to other users.
   umask 0007
@@ -470,7 +480,25 @@ install_shadowbox() {
   fi
   readonly API_PORT
   readonly ACCESS_CONFIG="${ACCESS_CONFIG:-${SHADOWBOX_DIR}/access.txt}"
-  readonly SB_IMAGE="${SB_IMAGE:-quay.io/outline/shadowbox:stable}"
+  
+  # Select the appropriate Docker image based on architecture if SB_IMAGE is not explicitly set
+  if [[ -z "${SB_IMAGE:-}" ]]; then
+    case "${MACHINE_TYPE}" in
+      amd64)
+        DEFAULT_IMAGE="quay.io/outline/shadowbox:stable"
+        ;;
+      arm64)
+        # Use multi-arch image that supports ARM64
+        DEFAULT_IMAGE="quay.io/outline/shadowbox:stable"
+        ;;
+      *)
+        DEFAULT_IMAGE="quay.io/outline/shadowbox:stable"
+        ;;
+    esac
+    readonly SB_IMAGE="${DEFAULT_IMAGE}"
+  else
+    readonly SB_IMAGE="${SB_IMAGE}"
+  fi
 
   PUBLIC_HOSTNAME="${FLAGS_HOSTNAME:-${SB_PUBLIC_IP:-}}"
   if [[ -z "${PUBLIC_HOSTNAME}" ]]; then
